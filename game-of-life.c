@@ -1,10 +1,8 @@
 #include <raylib.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
+#include <math.h>
 
-#define ROWS 120
-#define COLS 120
 
 typedef enum Window { START, MAIN } Window;
 
@@ -13,7 +11,7 @@ typedef struct Cell {
     Rectangle bounds;
 } Cell;
 
-bool *evaluate(Cell grid[ROWS][COLS], int row, int col) {
+bool *evaluate(int ROWS, int COLS, Cell grid[ROWS][COLS], int row, int col) {
     bool *result = malloc(3 * sizeof(bool));
     int count = 0;
     for (int i = -1; i <= 1; i++) {
@@ -21,7 +19,7 @@ bool *evaluate(Cell grid[ROWS][COLS], int row, int col) {
             if (i == 0 && j == 0)
                 continue;
             if (row + i >= 0 && row + i < ROWS && col + j >= 0 &&
-                col + j < COLS - 1) {
+                col + j < COLS) {
                 if (grid[row + i][col + j].active) {
                     count++;
                 }
@@ -40,27 +38,32 @@ int main() {
     SetTargetFPS(60);
 
     Window window = START;
+
     const float screenWidth = GetScreenWidth();
     const float screenHeight = GetScreenHeight();
-    const float cellWidth = screenWidth / COLS;
-    const float cellHeight = screenHeight / ROWS;
+    const int maxGridSize = 140;
+    const float cellSize = fminf(screenWidth, screenHeight) / maxGridSize;
+    const int ROWS = (int)(screenHeight / cellSize);
+    const int COLS = (int)(screenWidth / cellSize);
+
     Cell grid[ROWS][COLS];
-    Cell nextGrid[ROWS][COLS];
+    Cell gridNext[ROWS][COLS];
+    Cell gridSaved[ROWS][COLS];
+
     bool pause = false;
-    bool reset = false;
     bool *result;
+
     int generation = 5;
     int fpsCounter = 0;
 
-    srand(time(NULL));
     for (int row = 0; row < ROWS; row++) {
         for (int col = 0; col < COLS; col++) {
             grid[row][col] = (Cell){.active = false,
                 .bounds = {
-                .width = cellWidth,
-                    .height = cellHeight,
-                    .x = col * cellWidth,
-                    .y = row * cellHeight,
+                .width = cellSize,
+                .height = cellSize,
+                    .x = col * cellSize,
+                    .y = row * cellSize,
                 }};
             if (row == col || row + col == ROWS) {
                 grid[row][col].active = true;
@@ -79,19 +82,20 @@ int main() {
             generation -= 5;
         }
         if (IsKeyPressed('R')) {
-            reset = true;
+            memcpy(grid, gridSaved, sizeof(grid));
+            pause = false;
             window = START;
         }
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-            int posX = GetMouseX() / cellWidth;
-            int posY = GetMouseY() / cellHeight;
+            int posX = GetMouseX() / cellSize;
+            int posY = GetMouseY() / cellSize;
             if (posX >= 0 && posX < COLS && posY >= 0 && posY < ROWS) {
                 grid[posY][posX].active = !grid[posY][posX].active;
             }
         }
         if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
-            int posX = GetMouseX() / cellWidth;
-            int posY = GetMouseY() / cellHeight;
+            int posX = GetMouseX() / cellSize;
+            int posY = GetMouseY() / cellSize;
             if (posX >= 0 && posX < COLS && posY >= 0 && posY < ROWS) {
                 grid[posY][posX].active = !grid[posY][posX].active;
             }
@@ -102,41 +106,40 @@ int main() {
 
         switch (window) {
             case START:
-                if (IsKeyPressed(KEY_ENTER))
+                if (IsKeyPressed(KEY_ENTER)){
+                    memcpy(gridSaved, grid, sizeof(grid));
                     window = MAIN;
+                }
                 break;
             case MAIN:
                 if (fpsCounter >= generation && !pause) {
-                    memcpy(nextGrid, grid, sizeof(grid));
+                    memcpy(gridNext, grid, sizeof(grid));
                     for (int row = 0; row < ROWS; row++) {
                         for (int col = 0; col < COLS; col++) {
-                            result = evaluate(grid, row, col);
+                            result = evaluate(ROWS, COLS, grid, row, col);
                             if (grid[row][col].active) {
                                 if (result[0] || result[1])
-                                    nextGrid[row][col].active = false;
+                                    gridNext[row][col].active = false;
                             } else {
                                 if (result[2])
-                                    nextGrid[row][col].active = true;
+                                    gridNext[row][col].active = true;
                             }
                             free(result);
                         }
                     }
-                    memcpy(grid, nextGrid, sizeof(grid));
+                    memcpy(grid, gridNext, sizeof(grid));
                     fpsCounter = 0;
                 }
                 break;
         }
         for (int row = 0; row < ROWS; row++) {
             for (int col = 0; col < COLS; col++) {
-                if (reset)
-                    grid[row][col].active = false;
                 Color cellColor = grid[row][col].active ? BLACK : RAYWHITE;
                 DrawRectangleRec(grid[row][col].bounds, cellColor);
                 DrawRectangleLinesEx(grid[row][col].bounds, 0.3f, LIGHTGRAY);
             }
         }
         DrawText(TextFormat("Generation Delay: %d", generation), 30, 30, 34, GRAY);
-        reset = false;
         EndDrawing();
     }
     CloseWindow();
